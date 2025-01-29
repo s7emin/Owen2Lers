@@ -1,7 +1,11 @@
 import json
 import time
 import requests
+import logging
 from datetime import datetime, timezone
+
+# Настраиваем логирование
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%H:%M:%S')
 
 # Загружаем конфигурационный файл
 def load_config(file_path):
@@ -19,8 +23,10 @@ def authenticate(login, password):
         if data.get("error_status") == 0:
             return data.get("token")
         else:
+            logging.error(f"Ошибка при аутентификации в OwenCloud: {data}")
             raise Exception(f"Ошибка при аутентификации в OwenCloud: {data}")
     else:
+        logging.error(f"Ошибка при аутентификации в OwenCloud: {response.status_code}, {response.text}")
         raise Exception(f"Ошибка при аутентификации в OwenCloud: {response.status_code}, {response.text}")
 
 # Получаем текущие данные из OwenCloud
@@ -34,6 +40,7 @@ def fetch_current_data(token, parameter_ids):
     if response.status_code == 200:
         return response.json()
     else:
+        logging.error(f"Ошибка при получении текущих данных: {response.status_code}, {response.text}")
         raise Exception(f"Ошибка при получении текущих данных: {response.status_code}, {response.text}")
 
 # Записываем данные в ЛЭРС
@@ -52,11 +59,11 @@ def send_data_to_lers(server_url, token, lers_measurepoint_id, consumption_data)
         response = requests.put(url, json=payload, headers=headers)
 
         if response.status_code == 200:
-            print(f"Данные успешно отправлены на сервер ЛЭРС для точки учёта {lers_measurepoint_id}")
+            logging.info(f"Данные успешно отправлены на сервер ЛЭРС для точки учёта {lers_measurepoint_id}")
         else:
-            print(f"Ошибка при отправке данных на сервер ЛЭРС: {response.status_code}, {response.text}")
+            logging.error(f"Ошибка при отправке данных на сервер ЛЭРС: {response.status_code}, {response.text}")
     except Exception as e:
-        print(f"Исключение при отправке данных на сервер ЛЭРС: {e}")
+        logging.exception(f"Исключение при отправке данных на сервер ЛЭРС: {e}")
 
 
 def main():
@@ -79,12 +86,25 @@ def main():
 
     try:
         token = authenticate(login, password)
-        print("Успешная аутентификация в OwenCloud.")
+        logging.info("Успешная аутентификация в OwenCloud.")
 
         while True:
             try:
                 data = fetch_current_data(token, all_parameter_ids)
-                print("Получены данные от OwenCloud:", data)
+                
+                # Форматируем вывод данных в лог
+                formatted_data = "id параметра; дата; значение\n"
+                for item in data:
+                    item_id = item["id"]
+                    if item["values"]:
+                        timestamp = item["values"][0]["d"]
+                        value = item["values"][0]["v"]
+                        date_time = datetime.fromtimestamp(timestamp).strftime('%H:%M:%S %d.%m.%y')
+                        formatted_data += f"{item_id}; {date_time}; {value}\n"
+                    else:
+                        formatted_data += f"{item_id}; None; None\n"
+                
+                logging.info("Получены данные от OwenCloud:\n%s", formatted_data)
 
                 # Инициализируем пустой словарь для хранения данных
                 data_map = {}
@@ -141,22 +161,22 @@ def main():
                                     "value": value
                                 })
                             else:
-                                print(f"Нет новых данных для параметра {owen_parameter_id}, пропускаем.")
+                                logging.info(f"Нет новых данных для параметра {owen_parameter_id}, пропускаем.")
                         else:
-                            print(f"Данные не получены для параметра {owen_parameter_id}.")
+                            logging.warning(f"Данные не получены для параметра {owen_parameter_id}.")
 
                     if consumption_data:
                         send_data_to_lers(lers_server_url, lers_token, lers_measurepoint_id, consumption_data)
                     else:
-                        print(f"Нет новых данных для отправки в ЛЭРС для точки учёта {lers_measurepoint_id}.")
+                        logging.info(f"Нет новых данных для отправки в ЛЭРС для точки учёта {lers_measurepoint_id}.")
 
             except Exception as e:
-                print("Ошибка при получении или отправке данных:", e)
+                logging.exception("Ошибка при получении или отправке данных: %s", e)
 
             time.sleep(send_interval)  # ждём указанное время
 
     except Exception as e:
-        print("Ошибка:", e)
+        logging.exception("Ошибка: %s", e)
 
 if __name__ == "__main__":
     main()
