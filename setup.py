@@ -25,6 +25,17 @@ def authenticate(login, password):
     else:
         raise Exception(f"Ошибка при аутентификации в OwenCloud: {response.status_code}, {response.text}")
 
+def get_devices(token):
+    devices_url = "https://api.owencloud.ru/v1/device/index"
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.post(devices_url, headers=headers)
+
+    if response.status_code == 200:
+        devices = response.json()
+        return devices
+    else:
+        raise Exception(f"Ошибка при получении списка приборов: {response.status_code}, {response.text}")
+
 def test_lers_connection(server_url):
     try:
         response = requests.get(f"{server_url}/api/v1/ServerInfo")
@@ -58,19 +69,19 @@ def test_lers_token(server_url, token):
 def create_config():
     config = {}
 
-    # Get OwenCloud credentials and authenticate
+    # Get OwenCloud token and fetch devices
     while True:
-        config['login'] = input("Введите логин для OwenCloud: ")
-        config['password'] = input("Введите пароль для OwenCloud: ")
+        config['owen_token'] = input("Введите Bearer токен для OwenCloud: ")
 
-        # Проверка аутентификации
+        # Получение списка приборов
         try:
-            token, name, surname, company_name = authenticate(config['login'], config['password'])
-            print(f"{Colors.GREEN}Успешная аутентификация в OwenCloud.{Colors.RESET}")
-            print(f"{Colors.GREEN}Имя: {name}, Фамилия: {surname}, Компания: {company_name}{Colors.RESET}")
-            break  # Выход из цикла при успешной аутентификации
+            devices = get_devices(config['owen_token'])
+            print(f"{Colors.GREEN}Список доступных приборов:{Colors.RESET}")
+            for device in devices:
+                print(f"{Colors.GREEN}{device['name']}{Colors.RESET}")
+            break  # Выход из цикла при успешном получении списка приборов
         except Exception as e:
-            print(f"{Colors.RED}Ошибка аутентификации: {e}. Попробуйте снова.{Colors.RESET}")
+            print(f"{Colors.RED}Ошибка при получении списка приборов: {e}. Попробуйте снова.{Colors.RESET}")
 
     # Get LERS server details and test connection
     while True:

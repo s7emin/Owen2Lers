@@ -12,26 +12,9 @@ def load_config(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
         return json.load(file)
 
-# Аутентификация в OwenCloud и получение токена
-def authenticate(login, password):
-    auth_url = f"https://api.owencloud.ru/v1/auth/open"
-    payload = {"login": login, "password": password}
-    response = requests.post(auth_url, json=payload)
-
-    if response.status_code == 200:
-        data = response.json()
-        if data.get("error_status") == 0:
-            return data.get("token")
-        else:
-            logging.error(f"Ошибка при аутентификации в OwenCloud: {data}")
-            raise Exception(f"Ошибка при аутентификации в OwenCloud: {data}")
-    else:
-        logging.error(f"Ошибка при аутентификации в OwenCloud: {response.status_code}, {response.text}")
-        raise Exception(f"Ошибка при аутентификации в OwenCloud: {response.status_code}, {response.text}")
-
 # Получаем текущие данные из OwenCloud
 def fetch_current_data(token, parameter_ids):
-    data_url = f"https://api.owencloud.ru/v1/parameters/last-data"
+    data_url = "https://api.owencloud.ru/v1/parameters/last-data"
     headers = {"Authorization": f"Bearer {token}"}
     payload = {"ids": parameter_ids}
 
@@ -52,8 +35,6 @@ def send_data_to_lers(server_url, token, lers_measurepoint_id, consumption_data)
                 "consumption": consumption_data
             }
         }
-
-        # Отправляем PUT запрос
         headers = {"Authorization": f"Bearer {token}"}
         url = f"{server_url}/api/v1/Data/MeasurePoints/{lers_measurepoint_id}/Consumption/CurrentArchive"
         response = requests.put(url, json=payload, headers=headers)
@@ -65,12 +46,10 @@ def send_data_to_lers(server_url, token, lers_measurepoint_id, consumption_data)
     except Exception as e:
         logging.exception(f"Исключение при отправке данных на сервер ЛЭРС: {e}")
 
-
 def main():
     config = load_config("config.json")
 
-    login = config["login"]
-    password = config["password"]
+    owen_token = config["owen_token"]
     lers_server_url = config["lers_server_url"]
     lers_token = config["lers_token"]
     send_interval = config["send_interval"]
@@ -85,12 +64,9 @@ def main():
     last_timestamps = {param_id: None for param_id in all_parameter_ids}
 
     try:
-        token = authenticate(login, password)
-        logging.info("Успешная аутентификация в OwenCloud.")
-
         while True:
             try:
-                data = fetch_current_data(token, all_parameter_ids)
+                data = fetch_current_data(owen_token, all_parameter_ids)
                 
                 # Форматируем вывод данных в лог
                 formatted_data = "id параметра; дата; значение\n"
@@ -99,7 +75,7 @@ def main():
                     if item["values"]:
                         timestamp = item["values"][0]["d"]
                         value = item["values"][0]["v"]
-                        date_time = datetime.fromtimestamp(timestamp).strftime('%H:%M:%S %d.%m.%y')
+                        date_time = datetime.fromtimestamp(timestamp).strftime('%H:%M:%S %m.%d.%y')
                         formatted_data += f"{item_id}; {date_time}; {value}\n"
                     else:
                         formatted_data += f"{item_id}; None; None\n"
